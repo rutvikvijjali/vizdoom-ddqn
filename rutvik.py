@@ -26,22 +26,27 @@ class agent :
         self.gamma = 0.99 #Discount factor
 
         self.network_params = tf.trainable_variables()
+        
+        """Uncomment the lines below for using a target network"""
         # self.t_outputs = self.createNetwork()
         # self.t_network_params = tf.trainable_variables()[len(self.network_params):]
 
-        '''Target Network implementation'''
-        #
+        '''Target Network implementation, Uncomment the next 4 lines'''
+    
         # print(len(self.t_network_params))
         # print(len(self.network_params))
-        #
         # self.update_target_op = [self.t_network_params[i].assign(tf.multiply(self.network_params[i], self.tau) + tf.multiply(self.t_network_params[i], 1 - self.tau)) for i in range(len(self.network_params))]
-
+        # self.t_out = tf.placeholder(tf.float32,[None,3])
+        
         self.t_out = tf.placeholder(tf.float32,[None],'Target_out')
         self.action_buffer = []
         self.action_vec = tf.placeholder(tf.float32,[None,3],name='Action_vector')
-
+           
+        #Comment the line below for DDQN
         self.q_vector = tf.reduce_sum(tf.multiply(self.outputs,self.action_vec))
-
+        #Uncomment the line below and comment the next one for DDQN
+        #self.loss = tf.reduce_mean(tf.square(self.outputs-self.t_out))
+        
         self.loss = tf.reduce_mean(tf.square(self.q_vector-self.t_out))
         self.frames = []
 
@@ -53,24 +58,7 @@ class agent :
 
 
     def train(self):
-        """
-        1. Fetch everything saved in replay buffer.
-        2. Compute target values for each observation in buffer by computing r + gamma*q_target(s')
-        3. Compute update i.e q(s) - r + gamma*q_target(s')
-        4. Reduce this loss using the optimiser.
-        :return:
-        """
-
         index = self.sample()
-        # samples = [self.buffer[i] for i in index]
-        # inp = [samples[i][0] for i in range(len(samples))]
-        # # inp =np.array(inp)
-        # # inp = list(inp[:,0,:,:,:])
-        #
-        # tar = [samples[i][3] for i in range(len(samples))]
-        # tar = np.array(tar)
-        # tar = list(tar[:,0,:,:,:])
-
         action_ = []
         inp = []
         tar = []
@@ -87,8 +75,7 @@ class agent :
             act_vec.append(act)
             # action_.append(self.buffer[i][1])
             done.append(self.buffer[i][4])
-        # target_predictions = self.sess.run(self.t_outputs, feed_dict = {self.inp_layer:tar})
-        # print('2')
+        # target_predictions = self.sess.run(self.t_outputs, feed_dict = {self.inp_layer:tar}) #Uncomment this line for DDQN
         model_predictions = self.sess.run(self.outputs, feed_dict = {self.inp_layer:tar})
 
 
@@ -102,13 +89,15 @@ class agent :
                 tar_q.append(rew[i])
             else:
                 act = np.argmax(model_predictions[i])
+                #Uncomment the line below and comment the next one for DDQN
+                #target[i][np.argmax(act_vec[i])] = rew[i] + self.gamma*(target_predictions[i][act])
                 target[i][np.argmax(act_vec[i])] = rew[i] + self.gamma*(model_predictions[i][act])
                 tar_q.append(rew[i]+self.gamma*(np.max(model_predictions[i][act])))
-
-
-        # print(np.shape(tar_q))
+         
+       #Uncomment the line below and comment the next one for DDQN
+       # _,l = self.sess.run([self.optimizer,self.loss],feed_dict={self.inp_layer:tar,self.action_vec:act_vec,self.t_out:target})
         _,l = self.sess.run([self.optimizer,self.loss],feed_dict={self.inp_layer:tar,self.action_vec:act_vec,self.t_out:tar_q})
-        # self.sess.run(self.update_target_op)
+        # self.sess.run(self.update_target_op) #Uncomment this line for DDQN
         return l
 
     def choose_act(self,state,decay_step,isRand,newEp):
@@ -117,7 +106,6 @@ class agent :
         if(newEp):
             self.frames = [img,img,img,img]
             self.action_buffer = np.stack(self.frames, axis=2)
-            # self.action_buffer = np.expand_dims(self.action_buffer, axis=0)
             act = self.sess.run(self.outputs, feed_dict={self.inp_layer: self.action_buffer.reshape((1,84,84,4))})
         elif(explore_prob>np.random.rand() or isRand):
             act = np.random.randint(0,3)
@@ -227,38 +215,28 @@ if __name__ == "__main__":
                 # a_1,s_1 = brain.choose_act(img,decay_step)
                 act_1 = np.zeros(3)
                 act_1[a_1] = 1
-                # a = random.choice(actions)
-                # print(action)
-                # print(act)
-
+   
 
 
 
                 if (count > 0):
-                    # print(game.is_episode_finished())
-                    # print(r_0)
+
                     buff_size = brain.add((s_0, a_0, r_0, s_1, game.is_episode_finished()))
-                    # print('BUFFER_SIZE : ',buff_size)
+            
 
 
                 r_1 = game.make_action(act_1.tolist())
 
-                # print('GAME STATE:',game.get_state())
 
                 total_ep_rew += r_1
-
-                # if game.is_episode_finished() :
-                #      print('Total Reward : ', total_ep_rew)
 
                 s_0 = s_1
                 a_0 = a_1
                 act_0 = act_1
                 r_0 = r_1
 
-                # print(state.game_variables)
-                # print("\treward:", reward)
                 count = 1
-                # time.sleep(0.02)
+     
 
             img = np.ones((84, 84), dtype = np.int)
             if (buff_size > 100):
@@ -273,4 +251,3 @@ if __name__ == "__main__":
             print("Result:", game.get_total_reward())
             if(i%5 == 0):
                 save_path = saver.save(sess, "./models_rut/brain.ckpt")
-            # time.sleep(2)
